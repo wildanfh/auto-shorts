@@ -89,7 +89,6 @@ def _gradient_pan_clip(topic: str, duration: float):
 
 CLIP_DUR  = 3.5   # seconds per footage segment
 CLIP_FADE = 0.25  # crossfade between segments
-FONT_SIZE = 85    # caption font size (was 118)
 
 # Fallback queries used when topic keywords don't yield enough clips
 _FALLBACK_QUERIES = [

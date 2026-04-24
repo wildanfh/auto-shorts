@@ -44,7 +44,13 @@ def generate_visual_prompts(topic: str, n: int = 12) -> list[str]:
     )
 
     try:
-        prompts = json.loads(resp.content[0].text.strip())
+        raw = resp.content[0].text.strip()
+        # strip optional markdown code fence
+        if raw.startswith("```"):
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+        prompts = json.loads(raw.strip())
         logger.info("Generated %d visual prompts for: %s", len(prompts), topic)
         return prompts[:n]
     except Exception as exc:

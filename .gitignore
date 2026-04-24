@@ -6,3 +6,5 @@ logs/
 __pycache__/
 *.pyc
 .venv/
+*TEMP_MPY_wvf_snd.mp4
+/video_*.mp4
