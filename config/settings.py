@@ -26,10 +26,10 @@ USED_TOPICS_FILE = BASE_DIR / "data" / "used_topics.json"
 
 # Claude
 CLAUDE_MODEL = "claude-sonnet-4-6"
-SCRIPT_MAX_TOKENS = 400
+SCRIPT_MAX_TOKENS = 300
 SCRIPT_SYSTEM_PROMPT = (
     "You are a compelling YouTube Shorts scriptwriter specializing in psychology. "
-    "Write punchy, engaging scripts exactly 60 seconds when spoken at a natural pace (~150 wpm). "
+    "Write punchy, engaging scripts 40-55 seconds when spoken at a natural pace (~120-130 wpm). "
     "Hook in the first 3 seconds. No intro/outro fluff. Plain text only — no stage directions."
 )
 

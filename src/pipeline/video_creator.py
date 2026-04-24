@@ -206,6 +206,8 @@ def _assemble_footage(paths: list[Path], duration: float):
     return result.subclip(0, duration)
 
 
+_KLING_MAX = 4   # request at most 4 prompts; Pexels fills the rest
+
 def _kling_paths(topic: str, run_id: str, duration: float) -> list[Path]:
     """Generate AI video clips via Kling. Returns paths or [] on failure."""
     if not KLING_AI_ACCESS_KEY:
@@ -213,8 +215,7 @@ def _kling_paths(topic: str, run_id: str, duration: float) -> list[Path]:
     try:
         from src.utils.kling import generate_clips
         from src.utils.visual_prompts import generate_visual_prompts
-        n       = int(duration / float(_CLIP_DUR_KLING)) + 2
-        prompts = generate_visual_prompts(topic, n=n)
+        prompts = generate_visual_prompts(topic, n=_KLING_MAX)
         return generate_clips(prompts, run_id)
     except Exception as exc:
         logger.warning("Kling pipeline failed: %s", exc)

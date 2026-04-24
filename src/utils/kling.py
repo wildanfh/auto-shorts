@@ -22,6 +22,9 @@ _RATIO     = "9:16"
 _CFG       = 0.5
 _POLL_INT  = 10             # seconds between polls
 _TIMEOUT   = 600            # give up after 10 min per clip
+_SUBMIT_DELAY  = 4          # seconds between submissions to avoid 429
+_MAX_CLIPS     = 4          # cap Kling to 4 clips; Pexels fills the rest
+_RETRY_WAITS   = (30, 60, 120)  # backoff on 429
 
 
 def _token() -> str:
@@ -37,28 +40,43 @@ def _headers() -> dict:
 
 
 def _submit(prompt: str) -> str:
-    """Submit one text2video task, return task_id."""
-    resp = requests.post(
-        f"{_BASE}/v1/videos/text2video",
-        headers=_headers(),
-        json={
-            "model_name":      _MODEL,
-            "prompt":          prompt,
-            "negative_prompt": "text, watermark, blurry, low quality, logo",
-            "cfg_scale":       _CFG,
-            "mode":            _MODE,
-            "duration":        _DURATION,
-            "aspect_ratio":    _RATIO,
-        },
-        timeout=30,
-    )
-    resp.raise_for_status()
-    body = resp.json()
-    if body.get("code", 0) != 0:
-        raise RuntimeError(f"Kling submit error: {body}")
-    task_id = body["data"]["task_id"]
-    logger.debug("Kling task submitted: %s", task_id)
-    return task_id
+    """Submit one text2video task; retries on 429 with exponential backoff."""
+    last_exc = None
+    for attempt, wait in enumerate([0] + list(_RETRY_WAITS)):
+        if wait:
+            logger.info("Kling 429 — retry %d in %ds…", attempt, wait)
+            time.sleep(wait)
+        try:
+            resp = requests.post(
+                f"{_BASE}/v1/videos/text2video",
+                headers=_headers(),
+                json={
+                    "model_name":      _MODEL,
+                    "prompt":          prompt,
+                    "negative_prompt": "text, watermark, blurry, low quality, logo",
+                    "cfg_scale":       _CFG,
+                    "mode":            _MODE,
+                    "duration":        _DURATION,
+                    "aspect_ratio":    _RATIO,
+                },
+                timeout=30,
+            )
+            if resp.status_code == 429:
+                last_exc = requests.HTTPError(response=resp)
+                continue
+            resp.raise_for_status()
+            body = resp.json()
+            if body.get("code", 0) != 0:
+                raise RuntimeError(f"Kling submit error: {body}")
+            task_id = body["data"]["task_id"]
+            logger.debug("Kling task submitted: %s", task_id)
+            return task_id
+        except requests.HTTPError as exc:
+            if exc.response is not None and exc.response.status_code == 429:
+                last_exc = exc
+                continue
+            raise
+    raise RuntimeError(f"Kling 429 after all retries") from last_exc
 
 
 def _poll_one(task_id: str) -> str:
@@ -105,15 +123,19 @@ def generate_clips(prompts: list[str], run_id: str) -> list[Path]:
         logger.warning("Kling keys not configured")
         return []
 
-    # submit all tasks first (parallel-ish — no threading needed, Kling queues server-side)
+    # cap batch size — stay within free-tier rate limits
+    batch = prompts[:_MAX_CLIPS]
+
     task_ids: list[tuple[int, str]] = []
-    for i, prompt in enumerate(prompts):
+    for i, prompt in enumerate(batch):
         try:
             tid = _submit(prompt)
             task_ids.append((i, tid))
-            logger.info("Kling submitted clip %d/%d", i + 1, len(prompts))
+            logger.info("Kling submitted clip %d/%d", i + 1, len(batch))
         except Exception as exc:
             logger.warning("Kling submit failed (clip %d): %s", i, exc)
+        if i < len(batch) - 1:
+            time.sleep(_SUBMIT_DELAY)
 
     # poll + download
     paths: list[Path] = []

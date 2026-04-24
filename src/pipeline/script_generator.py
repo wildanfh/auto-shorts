@@ -29,7 +29,7 @@ def generate_script(topic: str) -> str:
         messages=[
             {
                 "role": "user",
-                "content": f"Write a 60-second YouTube Shorts script about: {topic}",
+                "content": f"Write a 40-55 second YouTube Shorts script about: {topic}",
             }
         ],
     )
