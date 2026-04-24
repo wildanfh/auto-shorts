@@ -1,0 +1,8 @@
+.env
+config/google-credentials.json
+config/sheets_token.json
+output/
+logs/
+__pycache__/
+*.pyc
+.venv/
