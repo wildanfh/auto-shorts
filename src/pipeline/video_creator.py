@@ -18,6 +18,7 @@ import PIL.Image
 if not hasattr(PIL.Image, "ANTIALIAS"):
     PIL.Image.ANTIALIAS = PIL.Image.LANCZOS
 from PIL import Image, ImageDraw, ImageFont
+from moviepy.audio.AudioClip import AudioArrayClip, CompositeAudioClip
 from moviepy.editor import (
     AudioFileClip,
     CompositeVideoClip,
@@ -36,6 +37,8 @@ FONT_BOLD = "/usr/share/fonts/fonts-go/Go-Bold.ttf"
 FONT_SIZE = 85           # caption font size
 CHUNK     = 4            # words per caption slide
 OUTLINE   = 7            # outline thickness in px
+HIGHLIGHT = (255, 214, 0, 255)   # yellow for key-word highlight
+MUSIC_VOL = 0.12                 # background music volume (0–1)
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -348,18 +351,69 @@ def _timed_chunks(audio_path: Path, script: str, total_dur: float
     return result
 
 
+def _ambient_music(duration: float, topic: str) -> AudioArrayClip:
+    """
+    Generate royalty-free ambient pad music using sine waves.
+    Key/chord varies per topic so each video sounds different.
+    """
+    sr       = 44100
+    n        = int(sr * duration)
+    t        = np.linspace(0, duration, n, dtype=np.float64)
+    h        = int(hashlib.md5(topic.encode()).hexdigest()[:4], 16)
+
+    # minor / major chord sets (root, third, fifth, octave) in Hz
+    chords = [
+        [130.81, 155.56, 196.00, 261.63],   # Cm
+        [138.59, 164.81, 207.65, 277.18],   # C#m
+        [146.83, 174.61, 220.00, 293.66],   # Dm
+        [164.81, 196.00, 246.94, 329.63],   # Em
+        [130.81, 164.81, 196.00, 261.63],   # C major
+        [146.83, 185.00, 220.00, 293.66],   # D major
+    ]
+    freqs = chords[h % len(chords)]
+
+    wave = np.zeros(n, dtype=np.float64)
+    for i, f in enumerate(freqs):
+        # slight detuning per partial for warmth (chorus effect)
+        detune = 1 + (i % 2) * 0.002
+        lfo    = 1 + 0.04 * np.sin(2 * np.pi * 0.25 * t + i)
+        wave  += np.sin(2 * np.pi * f * detune * t) * lfo * (0.07 / (i + 1))
+
+    # subtle high shimmer
+    wave += np.sin(2 * np.pi * freqs[0] * 4 * t) * 0.008
+
+    # fade in/out 3 seconds
+    fade = min(int(sr * 3), n // 4)
+    wave[:fade]  *= np.linspace(0, 1, fade)
+    wave[-fade:] *= np.linspace(1, 0, fade)
+
+    stereo = np.column_stack([wave, wave]).astype(np.float32)
+    return AudioArrayClip(stereo, fps=sr).set_duration(duration)
+
+
+def _key_word(text: str) -> str:
+    """Return the most impactful (longest non-stopword) word in a chunk."""
+    stop = _STOP_WORDS
+    candidates = [
+        w.strip(".,!?;:\"'")
+        for w in text.split()
+        if w.lower().strip(".,!?;:\"'") not in stop and len(w.strip(".,!?;:\"'")) > 3
+    ]
+    return max(candidates, key=len) if candidates else ""
+
+
 def _caption_frame(text: str) -> np.ndarray:
-    """RGBA frame: transparent except bottom gradient + big outlined caption."""
+    """RGBA frame: transparent except big outlined caption with one word highlighted."""
     img  = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
     font = _font()
 
+    highlight = _key_word(text)
 
-    # word-wrap at 13 chars/line to keep text big
     lines   = textwrap.wrap(text, width=13) or [text]
     line_h  = FONT_SIZE + 28
     total_h = len(lines) * line_h
-    y0      = H - total_h - 140   # 140px from bottom edge
+    y0      = H - total_h - 140
 
     outline_offsets = [
         (dx, dy)
@@ -373,11 +427,25 @@ def _caption_frame(text: str) -> np.ndarray:
         tw   = bbox[2] - bbox[0]
         x    = (W - tw) // 2
 
-        # black outline
+        # black outline for whole line
         for dx, dy in outline_offsets:
             draw.text((x + dx, y0 + dy), line, font=font, fill=(0, 0, 0, 255))
-        # white fill
+        # white fill for whole line
         draw.text((x, y0), line, font=font, fill=(255, 255, 255, 255))
+
+        # yellow overlay for key word
+        if highlight:
+            prefix = ""
+            for word in line.split():
+                if word.strip(".,!?;:\"'") == highlight:
+                    pb  = draw.textbbox((0, 0), prefix, font=font) if prefix else (0, 0, 0, 0)
+                    x_h = x + (pb[2] - pb[0])
+                    for dx, dy in outline_offsets:
+                        draw.text((x_h + dx, y0 + dy), word, font=font, fill=(0, 0, 0, 255))
+                    draw.text((x_h, y0), word, font=font, fill=HIGHLIGHT)
+                    break
+                prefix += word + " "
+
         y0 += line_h
 
     return np.array(img)
@@ -407,7 +475,9 @@ def create_video(audio_path: Path, topic: str, script: str, run_id: str) -> Path
         )
         cap_clips.append(clip)
 
-    final = CompositeVideoClip([bg] + cap_clips, size=(W, H)).set_audio(audio)
+    music      = _ambient_music(total_dur, topic).volumex(MUSIC_VOL)
+    mixed_audio = CompositeAudioClip([audio, music])
+    final = CompositeVideoClip([bg] + cap_clips, size=(W, H)).set_audio(mixed_audio)
 
     final.write_videofile(
         str(out_path),
