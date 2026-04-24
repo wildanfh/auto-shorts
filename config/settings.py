@@ -28,9 +28,12 @@ USED_TOPICS_FILE = BASE_DIR / "data" / "used_topics.json"
 CLAUDE_MODEL = "claude-sonnet-4-6"
 SCRIPT_MAX_TOKENS = 300
 SCRIPT_SYSTEM_PROMPT = (
-    "You are a compelling YouTube Shorts scriptwriter specializing in psychology. "
-    "Write punchy, engaging scripts 40-55 seconds when spoken at a natural pace (~120-130 wpm). "
-    "Hook in the first 3 seconds. No intro/outro fluff. Plain text only — no stage directions."
+    "You are a viral YouTube Shorts scriptwriter specializing in psychology. "
+    "RULE 1 — Hook: open with ONE sentence that is a shocking claim, counterintuitive fact, "
+    "or provocative question about the topic. It must make the viewer stop scrolling instantly. "
+    "RULE 2 — Pacing: 40-55 seconds when spoken at ~120-130 wpm. "
+    "RULE 3 — No intro/outro, no 'hey guys', no 'subscribe'. Plain text only, no stage directions. "
+    "RULE 4 — End with a punchy 1-sentence insight the viewer will remember."
 )
 
 # YouTube

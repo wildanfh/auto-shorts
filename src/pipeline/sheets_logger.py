@@ -17,6 +17,7 @@ _HEADER = [
     "run_id", "timestamp_utc", "topic",
     "script", "audio_path", "video_path",
     "youtube_url", "status", "error",
+    "views_24h", "likes_24h", "comments_24h", "avg_view_pct", "like_ratio",
 ]
 
 
@@ -79,5 +80,34 @@ def log_run(
         ws.append_row(row, value_input_option="USER_ENTERED")
         logger.info("Logged to Sheets: run_id=%s status=%s", run_id, status)
     except Exception as exc:
-        # Logging failure must never crash the pipeline
         logger.error("Sheets log failed: %s", exc)
+
+
+def update_analytics(run_id: str, stats: dict) -> None:
+    """
+    Find the row matching run_id and fill in analytics columns.
+    Called ~24h after upload.
+    """
+    if not stats:
+        return
+    try:
+        ws   = _get_sheet()
+        ids  = ws.col_values(1)            # column A = run_id
+        try:
+            row_num = ids.index(run_id) + 1
+        except ValueError:
+            logger.warning("update_analytics: run_id %s not found in sheet", run_id)
+            return
+
+        headers = ws.row_values(1)
+        col_map = {h: i + 1 for i, h in enumerate(headers)}
+
+        for key in ("views_24h", "likes_24h", "comments_24h", "avg_view_pct", "like_ratio"):
+            api_key = key.replace("_24h", "").replace("views", "views").replace("likes", "likes").replace("comments", "comments")
+            value   = stats.get(api_key, stats.get(key, ""))
+            if key in col_map and value != "":
+                ws.update_cell(row_num, col_map[key], str(value))
+
+        logger.info("Analytics updated in Sheets for run_id=%s", run_id)
+    except Exception as exc:
+        logger.error("update_analytics failed: %s", exc)

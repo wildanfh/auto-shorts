@@ -1,5 +1,8 @@
+import json
 import logging
+import time
 from datetime import datetime, timezone
+from pathlib import Path
 
 from src.pipeline.topic_picker import pick_topic
 from src.pipeline.script_generator import generate_script
@@ -12,6 +15,18 @@ from src.utils.telegram import send_summary
 from config.settings import LOGS_DIR
 
 logger = logging.getLogger(__name__)
+
+
+_PENDING_FILE = Path(__file__).parent.parent.parent / "data" / "analytics_pending.json"
+
+
+def _queue_analytics(run_id: str, youtube_url: str) -> None:
+    try:
+        pending = json.loads(_PENDING_FILE.read_text()) if _PENDING_FILE.exists() else []
+        pending.append({"run_id": run_id, "url": youtube_url, "ts": time.time()})
+        _PENDING_FILE.write_text(json.dumps(pending))
+    except Exception as exc:
+        logger.warning("Failed to queue analytics: %s", exc)
 
 
 def run_pipeline() -> None:
@@ -42,6 +57,10 @@ def run_pipeline() -> None:
             video_path=video_path,
             youtube_url=youtube_url,
         )
+
+        # queue analytics fetch for ~24h later
+        _queue_analytics(run_id, youtube_url)
+
         logger.info("=== Pipeline complete  url=%s ===", youtube_url)
         send_summary(
             run_id=run_id,

@@ -87,7 +87,7 @@ def _gradient_pan_clip(topic: str, duration: float):
     return VideoClip(make_frame, duration=duration).set_fps(30)
 
 
-CLIP_DUR  = 3.5   # seconds per footage segment
+CLIP_DUR  = 2.0   # seconds per footage segment
 CLIP_FADE = 0.25  # crossfade between segments
 
 # Fallback queries used when topic keywords don't yield enough clips
@@ -128,53 +128,104 @@ def _pexels_search(query: str, seen_ids: set, headers: dict) -> list[dict]:
     return fresh
 
 
-def _pexels_paths(topic: str, run_id: str, duration: float) -> list[Path]:
+_STOP_WORDS = {
+    "the","a","an","of","and","or","why","how","what","is","are","was","were",
+    "your","you","in","to","it","its","that","this","do","we","i","me","my",
+    "when","if","but","so","be","been","have","has","can","will","not","our",
+    "they","them","their","just","like","more","very","even","make","than",
+    "also","about","would","could","should","get","got","one","two","three",
+}
+
+
+def _script_queries(script: str, n: int, topic: str) -> list[str]:
     """
-    Download enough unique portrait clips to cover `duration` without repeating.
-    Tries topic keywords first, then progressively broader fallback queries.
+    Split script into n segments; return a Pexels search query per segment.
+    Extracts the 2 most meaningful words from each segment.
+    Falls back to topic keywords for empty segments.
+    """
+    words  = script.split()
+    seg_sz = max(1, len(words) // n)
+    stop   = _STOP_WORDS
+
+    topic_kw = [w.lower().strip(".,!?;:\"'") for w in topic.split()
+                if w.lower() not in stop and len(w) > 3]
+
+    queries = []
+    for i in range(n):
+        seg = words[i * seg_sz : (i + 1) * seg_sz]
+        kws = [w.lower().strip(".,!?;:\"'") for w in seg
+               if w.lower().strip(".,!?;:\"'") not in stop
+               and len(w.strip(".,!?;:\"'")) > 3]
+        query = " ".join(kws[:2]) if len(kws) >= 2 else (
+                kws[0] if kws else " ".join(topic_kw[:2]) or "psychology emotion"
+        )
+        queries.append(query)
+        logger.debug("Scene %d query: '%s'", i, query)
+
+    return queries
+
+
+def _fetch_one_clip(query: str, idx: int, run_id: str,
+                    seen_ids: set, headers: dict) -> Path | None:
+    """Fetch a single portrait clip for a given query; tries fallbacks if needed."""
+    import requests as req
+    candidates = [query] + _FALLBACK_QUERIES
+    for q in candidates:
+        try:
+            resp = req.get(
+                "https://api.pexels.com/videos/search",
+                headers=headers,
+                params={"query": q, "per_page": 10, "orientation": "portrait"},
+                timeout=12,
+            )
+            resp.raise_for_status()
+            videos = [v for v in resp.json().get("videos", [])
+                      if v["id"] not in seen_ids]
+            if not videos:
+                continue
+            random.shuffle(videos)
+            v = videos[0]
+            seen_ids.add(v["id"])
+            chosen = _best_portrait_file(v.get("video_files", []))
+            p = Path(f"/tmp/pexels_{run_id}_{idx}.mp4")
+            _download_video(chosen["link"], p)
+            logger.debug("Scene %d: '%s' → clip %s", idx, q, v["id"])
+            return p
+        except Exception as exc:
+            logger.warning("Pexels '%s' failed: %s", q, exc)
+    return None
+
+
+def _pexels_paths(topic: str, run_id: str, duration: float,
+                  script: str = "") -> list[Path]:
+    """
+    Download one portrait clip per scene, each matched to its script segment.
+    Falls back to topic keywords when a segment query yields nothing.
     """
     if not PEXELS_API_KEY:
         return []
 
-    needed = int(duration / CLIP_DUR) + 2   # clips needed to fill duration
-
-    stop  = {"the","a","an","of","and","or","why","how","what","is","are",
-             "your","you","in","to","it","its","that","this","do"}
-    kws   = [w.lower().rstrip(":,;") for w in topic.split() if w.lower() not in stop]
-    queries = [
-        " ".join(kws[:3]),
-        " ".join(kws[:2]),
-        kws[0] if kws else "psychology",
-    ] + _FALLBACK_QUERIES
-
-    headers  = {"Authorization": PEXELS_API_KEY}
+    needed  = int(duration / CLIP_DUR) + 2
+    headers = {"Authorization": PEXELS_API_KEY}
     seen_ids: set = set()
-    video_pool: list[dict] = []
 
-    for q in queries:
-        if len(video_pool) >= needed:
-            break
-        try:
-            fresh = _pexels_search(q, seen_ids, headers)
-            for v in fresh:
-                seen_ids.add(v["id"])
-            video_pool += fresh
-            logger.debug("Pexels query '%s' → %d fresh clips", q, len(fresh))
-        except Exception as exc:
-            logger.warning("Pexels query '%s' failed: %s", q, exc)
+    queries = _script_queries(script, needed, topic) if script else None
+
+    if not queries:
+        # legacy path: topic keywords only
+        stop = _STOP_WORDS
+        kws  = [w.lower().rstrip(":,;") for w in topic.split() if w.lower() not in stop]
+        base = [" ".join(kws[:3]), " ".join(kws[:2]),
+                kws[0] if kws else "psychology"] + _FALLBACK_QUERIES
+        queries = [base[i % len(base)] for i in range(needed)]
 
     paths = []
-    for i, v in enumerate(video_pool[:needed]):
-        try:
-            chosen = _best_portrait_file(v.get("video_files", []))
-            p = Path(f"/tmp/pexels_{run_id}_{i}.mp4")
-            _download_video(chosen["link"], p)
+    for i, q in enumerate(queries):
+        p = _fetch_one_clip(q, i, run_id, seen_ids, headers)
+        if p:
             paths.append(p)
-        except Exception as exc:
-            logger.warning("Download failed (video %s): %s", v.get("id"), exc)
 
-    logger.info("Pexels: %d unique clips fetched (need %d for %.0fs)",
-                len(paths), needed, duration)
+    logger.info("Pexels: %d/%d scene clips fetched", len(paths), needed)
     return paths
 
 
@@ -225,11 +276,11 @@ def _kling_paths(topic: str, run_id: str, duration: float) -> list[Path]:
 _CLIP_DUR_KLING = 5.0   # Kling default clip length
 
 
-def _bg_clip(topic: str, run_id: str, duration: float):
+def _bg_clip(topic: str, run_id: str, duration: float, script: str = ""):
     # Priority: Kling AI → Pexels → gradient fallback
     for fetcher, label in [
         (lambda: _kling_paths(topic, run_id, duration), "Kling"),
-        (lambda: _pexels_paths(topic, run_id, duration), "Pexels"),
+        (lambda: _pexels_paths(topic, run_id, duration, script), "Pexels"),
     ]:
         paths = fetcher()
         if paths:
@@ -303,11 +354,6 @@ def _caption_frame(text: str) -> np.ndarray:
     draw = ImageDraw.Draw(img)
     font = _font()
 
-    # dark gradient bar bottom 35%
-    bar_top = int(H * 0.65)
-    for y in range(bar_top, H):
-        a = int(210 * (y - bar_top) / (H - bar_top))
-        draw.line([(0, y), (W, y)], fill=(0, 0, 0, a))
 
     # word-wrap at 13 chars/line to keep text big
     lines   = textwrap.wrap(text, width=13) or [text]
@@ -346,7 +392,7 @@ def create_video(audio_path: Path, topic: str, script: str, run_id: str) -> Path
     audio     = AudioFileClip(str(audio_path))
     total_dur = audio.duration
 
-    bg     = _bg_clip(topic, run_id, total_dur)
+    bg     = _bg_clip(topic, run_id, total_dur, script)
     timed  = _timed_chunks(audio_path, script, total_dur)
 
     cap_clips = []
