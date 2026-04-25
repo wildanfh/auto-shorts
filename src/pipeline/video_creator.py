@@ -300,10 +300,17 @@ def _bg_clip(topic: str, run_id: str, duration: float, script: str = ""):
 
 # ── caption timing ───────────────────────────────────────────────────────────
 
+_STRIP_PUNCT = str.maketrans("", "", "—–-.,!?;:\"'")
+
+
+def _clean(text: str) -> str:
+    return text.translate(_STRIP_PUNCT)
+
+
 def _word_chunks(script: str) -> list[str]:
     """Equal-time fallback: plain text split into CHUNK-word groups."""
     words = script.split()
-    return [" ".join(words[i:i + CHUNK]) for i in range(0, len(words), CHUNK)]
+    return [_clean(" ".join(words[i:i + CHUNK])) for i in range(0, len(words), CHUNK)]
 
 
 def _timed_chunks(audio_path: Path, script: str, total_dur: float
@@ -343,7 +350,7 @@ def _timed_chunks(audio_path: Path, script: str, total_dur: float
     result = []
     for i in range(0, len(word_list), CHUNK):
         group  = word_list[i:i + CHUNK]
-        text   = " ".join(w[0] for w in group)
+        text   = _clean(" ".join(w[0] for w in group))
         t_start = group[0][1]
         t_end   = group[-1][2]
         result.append((text, t_start, t_end))
