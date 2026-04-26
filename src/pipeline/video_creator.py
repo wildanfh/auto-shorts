@@ -34,6 +34,11 @@ logger = logging.getLogger(__name__)
 
 W, H      = 1080, 1920
 FONT_BOLD = "/usr/share/fonts/fonts-go/Go-Bold.ttf"
+_FONT_FALLBACKS = [
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+    "/usr/share/fonts/truetype/ubuntu/Ubuntu-B.ttf",
+]
 FONT_SIZE = 85           # caption font size
 CHUNK     = 4            # words per caption slide
 OUTLINE   = 7            # outline thickness in px
@@ -44,10 +49,12 @@ MUSIC_VOL = 0.12                 # background music volume (0–1)
 # ── helpers ──────────────────────────────────────────────────────────────────
 
 def _font(size: int = FONT_SIZE) -> ImageFont.FreeTypeFont:
-    try:
-        return ImageFont.truetype(FONT_BOLD, size)
-    except OSError:
-        return ImageFont.load_default()
+    for path in [FONT_BOLD] + _FONT_FALLBACKS:
+        try:
+            return ImageFont.truetype(path, size)
+        except OSError:
+            continue
+    return ImageFont.load_default()
 
 
 def _topic_colors(topic: str) -> tuple:
