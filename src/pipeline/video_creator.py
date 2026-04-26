@@ -375,25 +375,31 @@ def _timed_chunks(audio_path: Path, script: str, total_dur: float
         return [(c, i * seg, (i + 1) * seg) for i, c in enumerate(chunks)]
 
     import json
-    data   = json.loads(sidecar.read_text())
-    chars  = data["characters"]
-    starts = data["character_start_times_seconds"]
-    ends   = data["character_end_times_seconds"]
+    data = json.loads(sidecar.read_text())
 
-    # build word-level timing
-    word_list: list[tuple[str, float, float]] = []
-    buf, w_start = [], None
-    for ch, ts, te in zip(chars, starts, ends):
-        if ch in (" ", "\n"):
-            if buf:
-                word_list.append(("".join(buf), w_start, te))
-                buf, w_start = [], None
-        else:
-            if not buf:
-                w_start = ts
-            buf.append(ch)
-    if buf:
-        word_list.append(("".join(buf), w_start, ends[-1]))
+    if "words" in data:
+        # OpenAI Whisper word-level format
+        word_list: list[tuple[str, float, float]] = [
+            (w["word"], w["start"], w["end"]) for w in data["words"]
+        ]
+    else:
+        # ElevenLabs character-level format (legacy)
+        chars  = data["characters"]
+        starts = data["character_start_times_seconds"]
+        ends   = data["character_end_times_seconds"]
+        word_list = []
+        buf, w_start = [], None
+        for ch, ts, te in zip(chars, starts, ends):
+            if ch in (" ", "\n"):
+                if buf:
+                    word_list.append(("".join(buf), w_start, te))
+                    buf, w_start = [], None
+            else:
+                if not buf:
+                    w_start = ts
+                buf.append(ch)
+        if buf:
+            word_list.append(("".join(buf), w_start, ends[-1]))
 
     # group into CHUNK-word segments
     result = []
