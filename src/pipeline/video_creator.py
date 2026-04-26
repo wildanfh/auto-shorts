@@ -137,14 +137,22 @@ _STOP_WORDS = {
     "when","if","but","so","be","been","have","has","can","will","not","our",
     "they","them","their","just","like","more","very","even","make","than",
     "also","about","would","could","should","get","got","one","two","three",
+    "you've","you're","you'll","you'd","i've","i'm","i'll","i'd","it's","that's",
+    "there","here","with","from","into","onto","upon","over","ever","never",
+    "always","often","every","probably","something","someone","somehow","anything",
+    "nothing","everything","because","actually","literally","basically","really",
+    "things","thing","know","think","feel","felt","done","told","said","says",
+    "doesn't","don't","didn't","won't","can't","isn't","aren't","wasn't","weren't",
+    "might","some","any","many","much","most","each","both","same","other",
+    "which","where","while","though","since","still","again","away","back",
+    "down","then","than","too","very","well","just","only","also","even",
 }
 
 
 def _script_queries(script: str, n: int, topic: str) -> list[str]:
     """
     Split script into n segments; return a Pexels search query per segment.
-    Extracts the 2 most meaningful words from each segment.
-    Falls back to topic keywords for empty segments.
+    Scene 0 uses first-sentence (hook) keywords for an instant visual match.
     """
     words  = script.split()
     seg_sz = max(1, len(words) // n)
@@ -153,15 +161,26 @@ def _script_queries(script: str, n: int, topic: str) -> list[str]:
     topic_kw = [w.lower().strip(".,!?;:\"'") for w in topic.split()
                 if w.lower() not in stop and len(w) > 3]
 
+    # First sentence = hook; its keywords drive scene 0 (min 5 chars for specificity)
+    first_sent = script.split(".")[0] if "." in script else script[:60]
+    hook_kws = [w.lower().strip(".,!?;:\"'") for w in first_sent.split()
+                if w.lower().strip(".,!?;:\"'") not in stop
+                and len(w.strip(".,!?;:\"'")) >= 5]
+
     queries = []
     for i in range(n):
-        seg = words[i * seg_sz : (i + 1) * seg_sz]
-        kws = [w.lower().strip(".,!?;:\"'") for w in seg
-               if w.lower().strip(".,!?;:\"'") not in stop
-               and len(w.strip(".,!?;:\"'")) > 3]
-        query = " ".join(kws[:2]) if len(kws) >= 2 else (
-                kws[0] if kws else " ".join(topic_kw[:2]) or "psychology emotion"
-        )
+        if i == 0:
+            query = " ".join(hook_kws[:2]) if len(hook_kws) >= 2 else (
+                    hook_kws[0] if hook_kws else " ".join(topic_kw[:2]) or "psychology emotion"
+            )
+        else:
+            seg = words[i * seg_sz : (i + 1) * seg_sz]
+            kws = [w.lower().strip(".,!?;:\"'") for w in seg
+                   if w.lower().strip(".,!?;:\"'") not in stop
+                   and len(w.strip(".,!?;:\"'")) > 3]
+            query = " ".join(kws[:2]) if len(kws) >= 2 else (
+                    kws[0] if kws else " ".join(topic_kw[:2]) or "psychology emotion"
+            )
         queries.append(query)
         logger.debug("Scene %d query: '%s'", i, query)
 
@@ -232,8 +251,37 @@ def _pexels_paths(topic: str, run_id: str, duration: float,
     return paths
 
 
+_VIGNETTE: np.ndarray | None = None
+
+
+def _vignette_mask() -> np.ndarray:
+    """Cache a soft circular vignette (darkens edges, 0–1 float)."""
+    global _VIGNETTE
+    if _VIGNETTE is None:
+        cx, cy = W / 2, H / 2
+        y, x = np.ogrid[:H, :W]
+        dist = np.sqrt(((x - cx) / cx) ** 2 + ((y - cy) / cy) ** 2)
+        _VIGNETTE = np.clip(1.0 - dist * 0.55, 0.35, 1.0).astype(np.float32)
+    return _VIGNETTE
+
+
+def _grade_frame(frame: np.ndarray) -> np.ndarray:
+    """Darken + cool tint + vignette — changes video fingerprint, adds mood."""
+    f = frame.astype(np.float32)
+    # cool grade: pull red down, push blue up slightly
+    f[:, :, 0] *= 0.85
+    f[:, :, 1] *= 0.92
+    f[:, :, 2] *= 1.06
+    # overall darken to ~75% brightness
+    f *= 0.76
+    # vignette
+    v = _vignette_mask()[:, :, np.newaxis]
+    f *= v
+    return np.clip(f, 0, 255).astype(np.uint8)
+
+
 def _assemble_footage(paths: list[Path], duration: float):
-    """Trim each clip to CLIP_DUR, concatenate with crossfade — no repeats."""
+    """Trim each clip to CLIP_DUR, apply grade+flip, concatenate with crossfade."""
     segments = []
     for p in paths:
         try:
@@ -241,6 +289,7 @@ def _assemble_footage(paths: list[Path], duration: float):
             max_start = max(0.0, c.duration - CLIP_DUR - 0.1)
             start = random.uniform(0, max_start)
             c = c.subclip(start, start + min(CLIP_DUR, c.duration))
+            c = c.fl_image(_grade_frame)
             segments.append(c)
         except Exception as exc:
             logger.warning("Skipping clip %s: %s", p, exc)
@@ -358,41 +407,75 @@ def _timed_chunks(audio_path: Path, script: str, total_dur: float
     return result
 
 
-def _ambient_music(duration: float, topic: str) -> AudioArrayClip:
+def _beat_music(duration: float, topic: str) -> AudioArrayClip:
     """
-    Generate royalty-free ambient pad music using sine waves.
-    Key/chord varies per topic so each video sounds different.
+    Royalty-free upbeat background track: kick, snare, hi-hat, bass.
+    BPM and root note vary per topic. Seeded for reproducibility.
     """
-    sr       = 44100
-    n        = int(sr * duration)
-    t        = np.linspace(0, duration, n, dtype=np.float64)
-    h        = int(hashlib.md5(topic.encode()).hexdigest()[:4], 16)
+    sr  = 44100
+    n   = int(sr * duration) + 4   # +4 buffer prevents off-by-one
+    h   = int(hashlib.md5(topic.encode()).hexdigest()[:4], 16)
+    rng = np.random.default_rng(h)
 
-    # minor / major chord sets (root, third, fifth, octave) in Hz
-    chords = [
-        [130.81, 155.56, 196.00, 261.63],   # Cm
-        [138.59, 164.81, 207.65, 277.18],   # C#m
-        [146.83, 174.61, 220.00, 293.66],   # Dm
-        [164.81, 196.00, 246.94, 329.63],   # Em
-        [130.81, 164.81, 196.00, 261.63],   # C major
-        [146.83, 185.00, 220.00, 293.66],   # D major
-    ]
-    freqs = chords[h % len(chords)]
+    bpm  = [115, 120, 125, 128, 130, 135][h % 6]
+    beat = 60.0 / bpm               # seconds per beat
 
     wave = np.zeros(n, dtype=np.float64)
-    for i, f in enumerate(freqs):
-        # slight detuning per partial for warmth (chorus effect)
-        detune = 1 + (i % 2) * 0.002
-        lfo    = 1 + 0.04 * np.sin(2 * np.pi * 0.25 * t + i)
-        wave  += np.sin(2 * np.pi * f * detune * t) * lfo * (0.07 / (i + 1))
 
-    # subtle high shimmer
-    wave += np.sin(2 * np.pi * freqs[0] * 4 * t) * 0.008
+    # Kick: sine freq-sweep 150→55 Hz, fast decay
+    kd  = int(sr * 0.14)
+    kenv = np.exp(-np.linspace(0, 8, kd))
+    kfreq = np.linspace(150, 55, kd)
+    kwav = np.sin(2 * np.pi * np.cumsum(kfreq) / sr) * kenv * 0.6
+    for i in range(int(duration / beat) + 2):
+        if i % 4 in (0, 2):        # beats 1 & 3
+            s = int(i * beat * sr)
+            e = min(s + kd, n)
+            wave[s:e] += kwav[:e - s]
 
-    # fade in/out 3 seconds
-    fade = min(int(sr * 3), n // 4)
+    # Snare: noise + 200 Hz tone
+    sd   = int(sr * 0.10)
+    senv = np.exp(-np.linspace(0, 10, sd))
+    swav = (rng.standard_normal(sd) * 0.15 +
+            np.sin(2 * np.pi * 200 * np.linspace(0, 0.10, sd)) * 0.08) * senv
+    for i in range(int(duration / beat) + 2):
+        if i % 4 in (1, 3):        # beats 2 & 4
+            s = int(i * beat * sr)
+            e = min(s + sd, n)
+            wave[s:e] += swav[:e - s]
+
+    # Hi-hat: short noise burst every 8th note
+    hd   = int(sr * 0.025)
+    henv = np.exp(-np.linspace(0, 18, hd))
+    for i in range(int(duration / (beat / 2)) + 2):
+        s = int(i * (beat / 2) * sr)
+        e = min(s + hd, n)
+        if s < n:
+            wave[s:e] += rng.standard_normal(e - s) * henv[:e - s] * 0.045
+
+    # Bass: sine on beats 1 & 3
+    roots = [65.41, 69.30, 73.42, 77.78, 82.41, 87.31]   # C2–F2
+    root  = roots[h % len(roots)]
+    bd    = int(sr * beat * 0.75)
+    benv  = np.exp(-np.linspace(0, 4, bd))
+    bwav  = np.sin(2 * np.pi * root * np.linspace(0, beat * 0.75, bd)) * benv * 0.28
+    for i in range(int(duration / beat) + 2):
+        if i % 4 in (0, 2):
+            s = int(i * beat * sr)
+            if s >= n:
+                break
+            e = min(s + bd, n)
+            wave[s:e] += bwav[:e - s]
+
+    # Fade in/out 1.5 s
+    fade = min(int(sr * 1.5), n // 4)
     wave[:fade]  *= np.linspace(0, 1, fade)
     wave[-fade:] *= np.linspace(1, 0, fade)
+
+    # Normalize
+    mx = np.abs(wave).max()
+    if mx > 0:
+        wave = wave / mx * 0.75
 
     stereo = np.column_stack([wave, wave]).astype(np.float32)
     return AudioArrayClip(stereo, fps=sr).set_duration(duration)
@@ -482,7 +565,7 @@ def create_video(audio_path: Path, topic: str, script: str, run_id: str) -> Path
         )
         cap_clips.append(clip)
 
-    music      = _ambient_music(total_dur, topic).volumex(MUSIC_VOL)
+    music      = _beat_music(total_dur, topic).volumex(MUSIC_VOL)
     mixed_audio = CompositeAudioClip([audio, music])
     final = CompositeVideoClip([bg] + cap_clips, size=(W, H)).set_audio(mixed_audio)
 

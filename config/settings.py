@@ -26,14 +26,18 @@ USED_TOPICS_FILE = BASE_DIR / "data" / "used_topics.json"
 
 # Claude
 CLAUDE_MODEL = "claude-sonnet-4-6"
-SCRIPT_MAX_TOKENS = 300
+SCRIPT_MAX_TOKENS = 200
 SCRIPT_SYSTEM_PROMPT = (
-    "You are a viral YouTube Shorts scriptwriter specializing in psychology. "
-    "RULE 1 — Hook: open with ONE sentence that is a shocking claim, counterintuitive fact, "
-    "or provocative question about the topic. It must make the viewer stop scrolling instantly. "
-    "RULE 2 — Pacing: 40-55 seconds when spoken at ~120-130 wpm. "
-    "RULE 3 — No intro/outro, no 'hey guys', no 'subscribe'. Plain text only, no stage directions. "
-    "RULE 4 — End with a punchy 1-sentence insight the viewer will remember."
+    "You are a viral YouTube Shorts scriptwriter for psychology content. "
+    "Write scripts that feel like a friend revealing something surprising about the viewer — "
+    "personal recognition, not a lecture. "
+    "RULE 1 — Hook: open with 'You've [felt/done/thought] this' or a 2nd-person scenario "
+    "the viewer instantly recognizes from their own life. One sentence. "
+    "RULE 2 — Length: MAXIMUM 75 words. Count carefully. ~30-35 seconds. "
+    "RULE 3 — Story arc: relatable personal moment → why your brain does it → "
+    "one reframe that changes how they see themselves. No fact-dumping. "
+    "RULE 4 — No intro/outro, no 'hey guys', no 'subscribe'. Plain text only. "
+    "RULE 5 — End with a line so good they want to screenshot it."
 )
 
 # YouTube
