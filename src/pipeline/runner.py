@@ -9,6 +9,7 @@ from src.pipeline.script_generator import generate_script
 from src.pipeline.voiceover import generate_voiceover
 from src.pipeline.video_creator import create_video
 from src.pipeline.youtube_uploader import upload_video
+from src.pipeline.facebook_uploader import upload_reel
 from src.pipeline.sheets_logger import log_run
 from src.utils.logger import setup_logging
 from src.utils.telegram import send_summary
@@ -48,6 +49,12 @@ def run_pipeline() -> None:
         video_path = create_video(audio_path, topic, script=script, run_id=run_id)
 
         youtube_url = upload_video(video_path, topic, script)
+
+        # non-fatal — Facebook failure doesn't stop the run
+        try:
+            upload_reel(video_path, topic, script)
+        except Exception as fb_exc:
+            logger.warning("Facebook upload failed (non-fatal): %s", fb_exc)
 
         log_run(
             run_id=run_id,

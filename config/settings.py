@@ -55,3 +55,7 @@ KLING_AI_SECRET_KEY = os.getenv("KLING_AI_SECRET_KEY", "")
 # Telegram
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
+
+# Facebook
+FACEBOOK_PAGE_ID           = os.getenv("FACEBOOK_PAGE_ID", "")
+FACEBOOK_PAGE_ACCESS_TOKEN = os.getenv("FACEBOOK_PAGE_ACCESS_TOKEN", "")

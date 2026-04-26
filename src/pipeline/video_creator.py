@@ -430,6 +430,7 @@ def _beat_music(duration: float, topic: str) -> AudioArrayClip:
     for i in range(int(duration / beat) + 2):
         if i % 4 in (0, 2):        # beats 1 & 3
             s = int(i * beat * sr)
+            if s >= n: break
             e = min(s + kd, n)
             wave[s:e] += kwav[:e - s]
 
@@ -441,6 +442,7 @@ def _beat_music(duration: float, topic: str) -> AudioArrayClip:
     for i in range(int(duration / beat) + 2):
         if i % 4 in (1, 3):        # beats 2 & 4
             s = int(i * beat * sr)
+            if s >= n: break
             e = min(s + sd, n)
             wave[s:e] += swav[:e - s]
 
@@ -449,9 +451,9 @@ def _beat_music(duration: float, topic: str) -> AudioArrayClip:
     henv = np.exp(-np.linspace(0, 18, hd))
     for i in range(int(duration / (beat / 2)) + 2):
         s = int(i * (beat / 2) * sr)
+        if s >= n: break
         e = min(s + hd, n)
-        if s < n:
-            wave[s:e] += rng.standard_normal(e - s) * henv[:e - s] * 0.045
+        wave[s:e] += rng.standard_normal(e - s) * henv[:e - s] * 0.045
 
     # Bass: sine on beats 1 & 3
     roots = [65.41, 69.30, 73.42, 77.78, 82.41, 87.31]   # C2–F2
