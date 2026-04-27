@@ -42,19 +42,43 @@ def _build_client():
     return build("youtube", "v3", credentials=creds)
 
 
+_HOOK_TEMPLATES = [
+    "Why {topic} 🧠",
+    "The truth about {topic}",
+    "Nobody tells you this about {topic}",
+    "Your brain is lying to you about {topic}",
+    "This is why {topic} — psychology explained",
+    "{topic}: the science is wild",
+]
+
+
+def _make_title(topic: str, ep: int) -> str:
+    import hashlib
+    idx = int(hashlib.md5(topic.encode()).hexdigest()[:2], 16) % len(_HOOK_TEMPLATES)
+    raw = _HOOK_TEMPLATES[idx].format(topic=topic)
+    return raw[:100]
+
+
 def upload_video(video_path: Path, topic: str, script: str) -> str:
     """Upload MP4 to YouTube Shorts, return the video URL."""
     youtube = _build_client()
 
     ep    = _next_episode()
-    title = f"Psychology #{ep}: {topic}"[:100]  # YouTube title limit 100 chars
-    description = "#psychology #shorts #mindset #science #facts"
+    title = _make_title(topic, ep)
+    # First sentence of script as description hook, then hashtags
+    first_sentence = script.split(".")[0].strip() if "." in script else script[:120].strip()
+    description = (
+        f"{first_sentence}.\n\n"
+        "#Shorts #psychology #mindset #psychologyfacts #brain "
+        "#selfimprovement #mentalhealth #learnontiktok #science #facts"
+    )
 
+    topic_tags = [w.lower() for w in topic.split() if len(w) > 3][:3]
     body = {
         "snippet": {
             "title": title,
             "description": description,
-            "tags": YOUTUBE_TAGS,
+            "tags": YOUTUBE_TAGS + topic_tags,
             "categoryId": YOUTUBE_CATEGORY_ID,
         },
         "status": {

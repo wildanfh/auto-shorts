@@ -42,9 +42,10 @@ SCRIPT_SYSTEM_PROMPT = (
 )
 
 # YouTube
-YOUTUBE_CATEGORY_ID = "22"  # People & Blogs
+YOUTUBE_CATEGORY_ID = "27"  # Education
 YOUTUBE_PRIVACY = "public"  # public | unlisted | private
-YOUTUBE_TAGS = ["psychology", "shorts", "mindset", "science", "facts"]
+YOUTUBE_TAGS = ["psychology", "shorts", "mindset", "science", "facts",
+                "psychologyfacts", "learnontiktok", "brain", "mentalhealth", "selfimprovement"]
 
 # Pexels (optional — stock video backgrounds)
 PEXELS_API_KEY = os.getenv("PEXELS_API_KEY", "")

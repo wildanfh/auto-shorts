@@ -2,9 +2,9 @@ name: Auto Shorts Pipeline
 
 on:
   schedule:
-    - cron: '0 6 * * *'   # 08:00 CEST (UTC+2)
-    - cron: '0 12 * * *'  # 14:00 CEST
-    - cron: '0 18 * * *'  # 20:00 CEST
+    - cron: '0 13 * * *'  # 15:00 CEST / 09:00 EDT — morning US
+    - cron: '0 17 * * *'  # 19:00 CEST / 13:00 EDT — lunch US
+    - cron: '0 21 * * *'  # 23:00 CEST / 17:00 EDT — after-work US
   workflow_dispatch:        # manual trigger from GitHub UI
 
 permissions:

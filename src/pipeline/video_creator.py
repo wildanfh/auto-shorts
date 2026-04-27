@@ -581,7 +581,8 @@ def create_video(audio_path: Path, topic: str, script: str, run_id: str) -> Path
         cap_clips.append(clip)
 
     music      = _beat_music(total_dur, topic).volumex(MUSIC_VOL)
-    mixed_audio = CompositeAudioClip([audio, music])
+    voice      = audio.volumex(1.5)   # boost TTS (OpenAI onyx is quiet)
+    mixed_audio = CompositeAudioClip([voice, music])
     final = CompositeVideoClip([bg] + cap_clips, size=(W, H)).set_audio(mixed_audio)
 
     final.write_videofile(
