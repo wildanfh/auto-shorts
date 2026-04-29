@@ -72,29 +72,35 @@ def fetch_stats(youtube_url: str) -> dict:
         likes    = int(stats.get("likeCount", 0))
         comments = int(stats.get("commentCount", 0))
 
-        # avg view duration % via YouTube Analytics API
+        # extended metrics via YouTube Analytics API
         avg_pct = ""
+        watch_minutes = ""
+        avg_view_sec = ""
         try:
             ya = build("youtubeAnalytics", "v2", credentials=creds, cache_discovery=False)
             ar = ya.reports().query(
-                ids=f"channel==MINE",
+                ids="channel==MINE",
                 startDate="2020-01-01",
                 endDate="2099-12-31",
-                metrics="averageViewPercentage",
+                metrics="averageViewPercentage,estimatedMinutesWatched,averageViewDuration",
                 filters=f"video=={vid_id}",
                 dimensions="video",
             ).execute()
             rows = ar.get("rows", [])
             if rows:
-                avg_pct = f"{rows[0][1]:.1f}%"
+                avg_pct       = f"{rows[0][1]:.1f}%"
+                watch_minutes = f"{rows[0][2]:.1f}"
+                avg_view_sec  = f"{rows[0][3]:.1f}s"
         except Exception as exc:
-            logger.debug("Analytics API avg view pct failed: %s", exc)
+            logger.debug("Analytics API extended metrics failed: %s", exc)
 
         result = {
             "views": views,
             "likes": likes,
             "comments": comments,
             "avg_view_pct": avg_pct,
+            "avg_view_sec": avg_view_sec,
+            "watch_minutes": watch_minutes,
             "like_ratio": f"{likes/views*100:.2f}%" if views else "0%",
         }
         logger.info("Analytics fetched for %s: %s", vid_id, result)

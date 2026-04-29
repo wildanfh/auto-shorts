@@ -445,7 +445,9 @@ def _beat_music(duration: float, topic: str) -> AudioArrayClip:
             s = int(i * beat * sr)
             if s >= n: break
             e = min(s + kd, n)
-            wave[s:e] += kwav[:e - s]
+            chunk = e - s
+            if chunk <= 0: continue
+            wave[s:e] += kwav[:chunk]
 
     # Snare: noise + 200 Hz tone
     sd   = int(sr * 0.10)
@@ -457,7 +459,9 @@ def _beat_music(duration: float, topic: str) -> AudioArrayClip:
             s = int(i * beat * sr)
             if s >= n: break
             e = min(s + sd, n)
-            wave[s:e] += swav[:e - s]
+            chunk = e - s
+            if chunk <= 0: continue
+            wave[s:e] += swav[:chunk]
 
     # Hi-hat: short noise burst every 8th note
     hd   = int(sr * 0.025)
@@ -466,7 +470,9 @@ def _beat_music(duration: float, topic: str) -> AudioArrayClip:
         s = int(i * (beat / 2) * sr)
         if s >= n: break
         e = min(s + hd, n)
-        wave[s:e] += rng.standard_normal(e - s) * henv[:e - s] * 0.045
+        chunk = e - s
+        if chunk <= 0: continue
+        wave[s:e] += rng.standard_normal(chunk) * henv[:chunk] * 0.045
 
     # Bass: sine on beats 1 & 3
     roots = [65.41, 69.30, 73.42, 77.78, 82.41, 87.31]   # C2–F2
@@ -480,7 +486,9 @@ def _beat_music(duration: float, topic: str) -> AudioArrayClip:
             if s >= n:
                 break
             e = min(s + bd, n)
-            wave[s:e] += bwav[:e - s]
+            chunk = e - s
+            if chunk <= 0: continue
+            wave[s:e] += bwav[:chunk]
 
     # Fade in/out 1.5 s
     fade = min(int(sr * 1.5), n // 4)
