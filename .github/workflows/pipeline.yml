@@ -1,12 +1,11 @@
 name: Auto Shorts Pipeline
 
 on:
-  # GH Actions schedule cron has 1-3h queue delay — NOT used for timing.
-  # Real triggers come from cron-job.org via workflow_dispatch API calls.
-  # Keep one daily fallback in case external cron misses.
   schedule:
-    - cron: '0 12 * * *'  # daily fallback only
-  workflow_dispatch:        # triggered by cron-job.org at exact times
+    - cron: '0 10 * * *'  # target 13:00 UTC / 09:00 EDT — shifted -3h for GH queue delay
+    - cron: '0 14 * * *'  # target 17:00 UTC / 13:00 EDT — shifted -3h
+    - cron: '0 18 * * *'  # target 21:00 UTC / 17:00 EDT — shifted -3h
+  workflow_dispatch:
 
 permissions:
   contents: write
