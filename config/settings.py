@@ -27,18 +27,21 @@ USED_TOPICS_FILE = BASE_DIR / "data" / "used_topics.json"
 
 # Claude
 CLAUDE_MODEL = "claude-sonnet-4-6"
-SCRIPT_MAX_TOKENS = 200
+SCRIPT_MAX_TOKENS = 400
 SCRIPT_SYSTEM_PROMPT = (
     "You are a viral YouTube Shorts scriptwriter for psychology content. "
     "Write scripts that feel like a friend revealing something surprising about the viewer — "
     "personal recognition, not a lecture. "
-    "RULE 1 — Hook: open with 'You've [felt/done/thought] this' or a 2nd-person scenario "
-    "the viewer instantly recognizes from their own life. One sentence. "
-    "RULE 2 — Length: MAXIMUM 75 words. Count carefully. ~30-35 seconds. "
-    "RULE 3 — Story arc: relatable personal moment → why your brain does it → "
-    "one reframe that changes how they see themselves. No fact-dumping. "
-    "RULE 4 — No intro/outro, no 'hey guys', no 'subscribe'. Plain text only. "
-    "RULE 5 — End with a line so good they want to screenshot it."
+    "RULE 1 — Hook (first 3 seconds = everything): open with ONE sentence that makes the viewer "
+    "feel personally called out — 'You've [felt/done/thought] this' or a second-person scenario "
+    "so specific they freeze mid-scroll. No questions. Statement only. "
+    "RULE 2 — Length: 140-150 words. ~50-55 seconds at normal speaking pace. "
+    "RULE 3 — Story arc: personal hook → surprising brain science → reframe that shifts their "
+    "self-perception. Three beats, tight. No fact-dumping, no filler. "
+    "RULE 4 — Pacing: every sentence must earn its place. Cut any sentence that could be removed "
+    "without losing meaning. Short sentences hit harder than long ones. "
+    "RULE 5 — No intro/outro, no 'hey guys', no 'subscribe', no 'like and comment'. Plain text. "
+    "RULE 6 — End with a single line so precise and true they want to screenshot it."
 )
 
 # YouTube

@@ -7,31 +7,66 @@ from config.settings import FACEBOOK_PAGE_ID, FACEBOOK_PAGE_ACCESS_TOKEN
 
 logger = logging.getLogger(__name__)
 
-_GRAPH_VIDEO = "https://graph-video.facebook.com/v25.0"
+_GRAPH = "https://graph-video.facebook.com/v25.0"
 
 
 def upload_reel(video_path: Path, topic: str, script: str) -> str:
-    """Upload MP4 to Facebook Page. Short videos appear as Reels in the feed."""
+    """Upload MP4 as a Facebook Reel via 3-step resumable upload.
+
+    /video_reels endpoint gives organic Reel reach vs /videos (page video, near-zero reach).
+    """
     if not FACEBOOK_PAGE_ID or not FACEBOOK_PAGE_ACCESS_TOKEN:
         logger.warning("Facebook credentials not set — skipping FB upload")
         return ""
 
-    description = f"{topic}\n\n#psychology #shorts #mindset #science #facts"
+    description = (
+        f"{topic}\n\n"
+        "#psychology #shorts #mindset #science #psychologyfacts "
+        "#brain #selfimprovement #mentalhealth #facts"
+    )
+    token     = FACEBOOK_PAGE_ACCESS_TOKEN
+    page_id   = FACEBOOK_PAGE_ID
+    file_size = video_path.stat().st_size
 
+    # Step 1: initialize upload
+    init = requests.post(
+        f"{_GRAPH}/{page_id}/video_reels",
+        data={"upload_phase": "start", "access_token": token},
+        timeout=30,
+    )
+    init.raise_for_status()
+    data       = init.json()
+    video_id   = data["video_id"]
+    upload_url = data["upload_url"]
+
+    # Step 2: upload bytes
     with open(video_path, "rb") as fp:
-        r = requests.post(
-            f"{_GRAPH_VIDEO}/{FACEBOOK_PAGE_ID}/videos",
-            data={
-                "description":  description,
-                "published":    "true",
-                "access_token": FACEBOOK_PAGE_ACCESS_TOKEN,
+        up = requests.post(
+            upload_url,
+            headers={
+                "Authorization": f"OAuth {token}",
+                "offset": "0",
+                "file_size": str(file_size),
             },
-            files={"source": (video_path.name, fp, "video/mp4")},
+            data=fp,
             timeout=300,
         )
+    up.raise_for_status()
 
-    r.raise_for_status()
-    video_id = r.json().get("id", "")
-    url = f"https://www.facebook.com/watch/?v={video_id}"
-    logger.info("Facebook video uploaded: %s", url)
+    # Step 3: publish
+    pub = requests.post(
+        f"{_GRAPH}/{page_id}/video_reels",
+        data={
+            "upload_phase": "finish",
+            "video_id": video_id,
+            "video_state": "PUBLISHED",
+            "description": description,
+            "access_token": token,
+        },
+        timeout=30,
+    )
+    pub.raise_for_status()
+
+    url = f"https://www.facebook.com/reel/{video_id}"
+    logger.info("Facebook Reel uploaded: %s", url)
     return url
