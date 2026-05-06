@@ -564,6 +564,46 @@ def _caption_frame(text: str) -> np.ndarray:
     return np.array(img)
 
 
+_HOOK_CARD_DUR = 1.6   # seconds the hook card is visible before fading
+
+
+def _hook_card_frame(hook_text: str) -> np.ndarray:
+    """Semi-transparent centered overlay showing the hook sentence for the first 1.6s."""
+    img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    font = _font(72)
+
+    words = hook_text.split()[:14]
+    text = " ".join(words)
+    lines = textwrap.wrap(text, width=16) or [text]
+    line_h = 72 + 22
+    total_h = len(lines) * line_h
+
+    pad = 44
+    y0 = int(H * 0.28)
+    rect_top = y0 - pad
+    rect_bot = y0 + total_h + pad
+    draw.rectangle([(pad, rect_top), (W - pad, rect_bot)], fill=(0, 0, 0, 168))
+
+    outline_offsets = [
+        (dx, dy)
+        for dx in range(-5, 6, 3)
+        for dy in range(-5, 6, 3)
+        if dx or dy
+    ]
+
+    for line in lines:
+        bbox = draw.textbbox((0, 0), line, font=font)
+        tw = bbox[2] - bbox[0]
+        x = (W - tw) // 2
+        for dx, dy in outline_offsets:
+            draw.text((x + dx, y0 + dy), line, font=font, fill=(0, 0, 0, 255))
+        draw.text((x, y0), line, font=font, fill=(255, 255, 255, 255))
+        y0 += line_h
+
+    return np.array(img)
+
+
 # ── main entry ────────────────────────────────────────────────────────────────
 
 def create_video(audio_path: Path, topic: str, script: str, run_id: str) -> Path:
@@ -588,10 +628,20 @@ def create_video(audio_path: Path, topic: str, script: str, run_id: str) -> Path
         )
         cap_clips.append(clip)
 
+    # Hook card: show first sentence prominently for the opening 1.6s
+    hook_sentence = script.split(".")[0].strip() if "." in script else script[:80]
+    hook_frame = _hook_card_frame(hook_sentence)
+    hook_card = (
+        ImageClip(hook_frame, ismask=False)
+        .set_duration(_HOOK_CARD_DUR)
+        .set_start(0)
+        .crossfadeout(0.4)
+    )
+
     music      = _beat_music(total_dur, topic).volumex(MUSIC_VOL)
     voice      = audio.volumex(1.5)   # boost TTS (OpenAI onyx is quiet)
     mixed_audio = CompositeAudioClip([voice, music])
-    final = CompositeVideoClip([bg] + cap_clips, size=(W, H)).set_audio(mixed_audio)
+    final = CompositeVideoClip([bg] + cap_clips + [hook_card], size=(W, H)).set_audio(mixed_audio)
 
     final.write_videofile(
         str(out_path),

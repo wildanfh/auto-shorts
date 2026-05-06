@@ -1,3 +1,4 @@
+import datetime as dt
 import json
 import logging
 import time
@@ -30,7 +31,14 @@ def _queue_analytics(run_id: str, youtube_url: str) -> None:
         logger.warning("Failed to queue analytics: %s", exc)
 
 
+_RESUME_DATE = dt.date(2026, 5, 9)
+
+
 def run_pipeline() -> None:
+    if dt.date.today() < _RESUME_DATE:
+        print(f"Pipeline paused for algorithm cooldown — resumes {_RESUME_DATE}.")
+        return
+
     run_id = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     setup_logging(run_id)
     logger.info("=== Pipeline start  run_id=%s ===", run_id)

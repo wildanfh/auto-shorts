@@ -43,12 +43,12 @@ def _build_client():
 
 
 _HOOK_TEMPLATES = [
-    "Why {topic} 🧠",
-    "The truth about {topic}",
-    "Nobody tells you this about {topic}",
-    "Your brain is lying to you about {topic}",
-    "This is why {topic} — psychology explained",
-    "{topic}: the science is wild",
+    "{topic} 🧠",
+    "{topic} — explained 🧠",
+    "Science: {topic} 🧠",
+    "Real reason: {topic} 🧠",
+    "Your brain: {topic} 🧠",
+    "{topic} (psychology) 🧠",
 ]
 
 
